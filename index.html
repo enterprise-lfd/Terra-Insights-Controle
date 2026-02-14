@@ -1,15 +1,4 @@
 <!DOCTYPE html>
-<html lang="en">
-
-  <head>
-    <meta charset="UTF-8">
-    <title>Terra Insights - Controle</title>
-    
-
-  </head>
-    
-  <body>
-  <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
@@ -38,7 +27,6 @@
             .bg-white { border: 1px solid #e2e8f0 !important; border-radius: 0 !important; }
             .shadow-sm, .shadow-lg { box-shadow: none !important; }
             
-            /* Garante que apenas a tabela seja visível no PDF do Dashboard */
             .print-full-width { width: 100% !important; border: none !important; display: block !important; }
             
             .print-only-header { 
@@ -47,8 +35,6 @@
                 padding-bottom: 10px; 
                 border-bottom: 2px solid #ea580c;
             }
-            /* Ocultar barra de progresso no PDF para um visual de tabela mais limpo se desejado, 
-               ou manter apenas as colunas principais */
             .print-hide-col { display: none !important; }
         }
         .print-only-header { display: none; }
@@ -82,7 +68,6 @@
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'terra-sales-app';
 
         // --- Componente de Ícone Corrigido ---
-        // Isolamos a manipulação de DOM do Lucide em um ref para evitar erros de reconciliação do React
         const Icon = ({ name, size = 18, className = "" }) => {
             const iconRef = useRef(null);
             
@@ -261,8 +246,8 @@
                                     <h1 className="text-xl font-black text-slate-800 tracking-tighter uppercase">Terra <span className="text-orange-600">Sales</span></h1>
                                 </div>
                                 <nav className="hidden md:flex gap-1">
-                                    <button onClick={() => setCurrentView('dashboard')} className={`px-4 py-2 text-sm font-bold rounded-lg ${currentView === 'dashboard' ? 'bg-orange-50 text-orange-600' : 'text-slate-500 hover:bg-slate-50'}`}>Dashboard</button>
-                                    <button onClick={() => setCurrentView('workflow')} className={`px-4 py-2 text-sm font-bold rounded-lg ${currentView === 'workflow' ? 'bg-orange-50 text-orange-600' : 'text-slate-500 hover:bg-slate-50'}`}>Fluxos</button>
+                                    <button onClick={() => setCurrentView('dashboard')} className={`px-4 py-2 text-sm font-bold rounded-lg transition-colors ${currentView === 'dashboard' ? 'bg-orange-50 text-orange-600' : 'text-slate-500 hover:bg-slate-50'}`}>Dashboard</button>
+                                    <button onClick={() => setCurrentView('workflow')} className={`px-4 py-2 text-sm font-bold rounded-lg transition-colors ${currentView === 'workflow' ? 'bg-orange-50 text-orange-600' : 'text-slate-500 hover:bg-slate-50'}`}>Fluxos</button>
                                 </nav>
                             </div>
                             <div className="flex items-center gap-4">
@@ -304,7 +289,7 @@
                                 </div>
 
                                 <div className="bg-white rounded-2xl border shadow-sm overflow-hidden print-full-width">
-                                    <div className="grid grid-cols-12 bg-slate-50 p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b">
+                                    <div className="grid grid-cols-12 bg-slate-50 p-4 text-xs font-black text-slate-400 uppercase tracking-widest border-b">
                                         <div className="col-span-12 md:col-span-4">Pesquisa & Solicitante</div>
                                         <div className="hidden md:block md:col-span-2">Fluxo</div>
                                         <div className="hidden md:block md:col-span-2 text-center">Período</div>
@@ -316,35 +301,35 @@
                                             const progress = r.respondentesEsperados ? Math.min(100, (r.respondentesAtuais / r.respondentesEsperados) * 100) : 0;
                                             return (
                                                 <div key={r.id} className="grid grid-cols-12 p-4 items-center hover:bg-slate-50 transition-colors group break-inside-avoid">
-                                                    <div className="col-span-12 md:col-span-4 flex items-center gap-3">
+                                                    <div className="col-span-12 md:col-span-4 flex items-center gap-4">
                                                         <div className="flex gap-1 opacity-0 group-hover:opacity-100 no-print transition-all">
                                                             <button onClick={() => handleOpenResearchModal(r)} className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg"><Icon name="edit-2" size={14} /></button>
                                                             <button onClick={() => handleDeleteResearch(r.id)} className="p-1.5 text-red-300 hover:text-red-500 hover:bg-red-50 rounded-lg"><Icon name="trash-2" size={14} /></button>
                                                         </div>
                                                         <div>
-                                                            <div className="font-bold text-slate-800">{r.nome}</div>
-                                                            <div className="text-xs text-slate-400 flex items-center gap-1"><Icon name="users" size={12} /> {r.solicitante}</div>
+                                                            <div className="text-lg font-bold text-slate-800 leading-tight group-hover:text-orange-600 transition-colors">{r.nome}</div>
+                                                            <div className="text-sm text-slate-500 flex items-center gap-1.5 mt-0.5"><Icon name="users" size={14} className="opacity-60" /> {r.solicitante}</div>
                                                         </div>
                                                     </div>
                                                     <div className="hidden md:block md:col-span-2">
-                                                        <span className={`text-[10px] font-black px-2 py-0.5 rounded ${getFluxoColor(r.fluxo)}`}>{r.fluxo}</span>
+                                                        <span className={`text-[11px] font-black px-2.5 py-1 rounded uppercase ${getFluxoColor(r.fluxo)}`}>{r.fluxo}</span>
                                                     </div>
                                                     <div className="hidden md:block md:col-span-2 text-center text-xs text-slate-500">
                                                         {r.dataInicio ? (
                                                             <div>
-                                                                {new Date(r.dataInicio).toLocaleDateString('pt-BR')} <br/>
-                                                                <span className="text-[9px] font-bold opacity-40 uppercase">até {new Date(r.dataFim).toLocaleDateString('pt-BR')}</span>
+                                                                <span className="font-semibold">{new Date(r.dataInicio).toLocaleDateString('pt-BR')}</span> <br/>
+                                                                <span className="text-[10px] font-bold opacity-40 uppercase">até {new Date(r.dataFim).toLocaleDateString('pt-BR')}</span>
                                                             </div>
                                                         ) : '--'}
                                                     </div>
                                                     <div className="hidden md:block md:col-span-2 print-hide-col px-4">
-                                                        <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden border">
-                                                            <div className={`h-full ${progress === 100 ? 'bg-emerald-500' : 'bg-orange-500'}`} style={{width: `${progress}%`}}></div>
+                                                        <div className="h-2 bg-slate-100 rounded-full overflow-hidden border border-slate-200">
+                                                            <div className={`h-full ${progress === 100 ? 'bg-emerald-500' : 'bg-orange-500'} transition-all`} style={{width: `${progress}%`}}></div>
                                                         </div>
-                                                        <p className="text-[9px] text-slate-400 mt-1 font-bold">{r.respondentesAtuais} / {r.respondentesEsperados}</p>
+                                                        <p className="text-[10px] text-slate-400 mt-1.5 font-bold">{r.respondentesAtuais.toLocaleString()} / {r.respondentesEsperados.toLocaleString()}</p>
                                                     </div>
                                                     <div className="col-span-12 md:col-span-2 flex justify-end">
-                                                        <span className={`text-[10px] font-black px-2 py-1 rounded-full border ${getStatusStyle(r.status)}`}>{r.status}</span>
+                                                        <span className={`text-[11px] font-black px-3 py-1.5 rounded-full border ${getStatusStyle(r.status)}`}>{r.status}</span>
                                                     </div>
                                                 </div>
                                             );
@@ -379,7 +364,7 @@
                                                         <div className="flex items-center gap-4">
                                                             <div className="p-2 bg-orange-50 text-orange-600 rounded-lg"><Icon name={s.icon || 'clipboard-list'} /></div>
                                                             <div>
-                                                                <h3 className="font-bold text-slate-800">{s.title}</h3>
+                                                                <h3 className="font-bold text-slate-800 leading-tight">{s.title}</h3>
                                                                 <p className="text-sm text-slate-500 mt-1">{s.description}</p>
                                                             </div>
                                                         </div>
@@ -469,8 +454,4 @@
         root.render(<App />);
     </script>
 </body>
-</html>
-    
-  </body>
-  
 </html>

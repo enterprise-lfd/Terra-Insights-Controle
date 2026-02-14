@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+
+  <head>
+    <meta charset="UTF-8">
+    <title>Terra Insights - Controle</title>
+    
+
+  </head>
+    
+  <body>
+  <!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Terra Sales - Gestão de Pesquisas</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React & ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <!-- Babel para JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .animate-fade-in { animation: fadeIn 0.3s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Estilos específicos para Impressão/PDF */
+        @media print {
+            .no-print { display: none !important; }
+            body { background-color: white !important; }
+            main { padding: 0 !important; margin: 0 !important; max-width: 100% !important; }
+            .bg-white { border: 1px solid #e2e8f0 !important; border-radius: 0 !important; }
+            .shadow-sm, .shadow-lg { box-shadow: none !important; }
+            
+            /* Garante que apenas a tabela seja visível no PDF do Dashboard */
+            .print-full-width { width: 100% !important; border: none !important; display: block !important; }
+            
+            .print-only-header { 
+                display: block !important; 
+                margin-bottom: 20px; 
+                padding-bottom: 10px; 
+                border-bottom: 2px solid #ea580c;
+            }
+            /* Ocultar barra de progresso no PDF para um visual de tabela mais limpo se desejado, 
+               ou manter apenas as colunas principais */
+            .print-hide-col { display: none !important; }
+        }
+        .print-only-header { display: none; }
+    </style>
+</head>
+<body class="bg-slate-50">
+    <div id="root"></div>
+
+    <script type="text/babel" data-type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, deleteDoc, collection, onSnapshot, query, addDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const { useState, useMemo, useEffect, useRef, useLayoutEffect } = React;
+
+        // --- Configuração Firebase ---
+        const firebaseConfig = typeof __firebase_config !== 'undefined' 
+            ? JSON.parse(__firebase_config) 
+            : {
+                apiKey: "AIzaSyDB2NUtkx2Yw2ZjT7TWpaEQBhZSM8eSGiE",
+                authDomain: "terra-insights-607a5.firebaseapp.com",
+                projectId: "terra-insights-607a5",
+                storageBucket: "terra-insights-607a5.firebasestorage.app",
+                messagingSenderId: "78975834698",
+                appId: "1:78975834698:web:e253b076dcdd75dcb2e4b3"
+            };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'terra-sales-app';
+
+        // --- Componente de Ícone Corrigido ---
+        // Isolamos a manipulação de DOM do Lucide em um ref para evitar erros de reconciliação do React
+        const Icon = ({ name, size = 18, className = "" }) => {
+            const iconRef = useRef(null);
+            
+            useLayoutEffect(() => {
+                if (window.lucide && iconRef.current) {
+                    iconRef.current.innerHTML = `<i data-lucide="${name}"></i>`;
+                    window.lucide.createIcons({
+                        attrs: {
+                            class: className,
+                            style: `width: ${size}px; height: ${size}px;`
+                        }
+                    });
+                }
+            }, [name, size, className]);
+
+            return <span ref={iconRef} className="inline-flex items-center justify-center leading-none" style={{ width: size, height: size }}></span>;
+        };
+
+        const App = () => {
+            const [user, setUser] = useState(null);
+            const [currentView, setCurrentView] = useState('dashboard');
+            const [activeFlowTab, setActiveFlowTab] = useState('Sazonal');
+            const [searchTerm, setSearchTerm] = useState('');
+            const [filterFluxo, setFilterFluxo] = useState('Todos');
+            const [filterStatus, setFilterStatus] = useState('Todos');
+
+            const [allFlows, setAllFlows] = useState({ 'Sazonal': [], 'On-demand': [], 'Sonora Trends': [] });
+            const [researches, setResearches] = useState([]);
+
+            const [isModalOpen, setIsModalOpen] = useState(false);
+            const [editingStep, setEditingStep] = useState(null);
+            const [formData, setFormData] = useState({ title: '', description: '', detail: '', icon: 'clipboard-list' });
+
+            const [isResearchModalOpen, setIsResearchModalOpen] = useState(false);
+            const [editingResearchId, setEditingResearchId] = useState(null);
+            const [researchFormData, setResearchFormData] = useState({
+                nome: '', solicitante: '', dataInicio: '', dataFim: '',
+                status: 'Na Fila', respondentesEsperados: 0, respondentesAtuais: 0, fluxo: 'Sazonal'
+            });
+
+            useEffect(() => {
+                const initAuth = async () => {
+                    try {
+                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                            await signInWithCustomToken(auth, __initial_auth_token);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    } catch (error) {
+                        console.error("Erro na autenticação:", error);
+                    }
+                };
+                initAuth();
+                const unsubscribe = onAuthStateChanged(auth, setUser);
+                return () => unsubscribe();
+            }, []);
+
+            useEffect(() => {
+                if (!user) return;
+
+                const flowsDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'workflow');
+                const unsubFlows = onSnapshot(flowsDocRef, (docSnap) => {
+                    if (docSnap.exists()) {
+                        setAllFlows(docSnap.data());
+                    } else {
+                        setDoc(flowsDocRef, { 'Sazonal': [], 'On-demand': [], 'Sonora Trends': [] });
+                    }
+                }, (error) => console.error(error));
+
+                const researchesColl = collection(db, 'artifacts', appId, 'public', 'data', 'researches');
+                const unsubResearches = onSnapshot(researchesColl, (snapshot) => {
+                    const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    setResearches(data);
+                }, (error) => console.error(error));
+
+                return () => { unsubFlows(); unsubResearches(); };
+            }, [user]);
+
+            const handleExportPDF = () => window.print();
+
+            const handleOpenResearchModal = (research = null) => {
+                if (research) {
+                    setEditingResearchId(research.id);
+                    setResearchFormData({ ...research });
+                } else {
+                    setEditingResearchId(null);
+                    setResearchFormData({
+                        nome: '', solicitante: '', dataInicio: '', dataFim: '',
+                        status: 'Na Fila', respondentesEsperados: 0, respondentesAtuais: 0, fluxo: 'Sazonal'
+                    });
+                }
+                setIsResearchModalOpen(true);
+            };
+
+            const handleSaveResearch = async () => {
+                if (!user) return;
+                const data = {
+                    ...researchFormData,
+                    respondentesEsperados: Number(researchFormData.respondentesEsperados),
+                    respondentesAtuais: Number(researchFormData.respondentesAtuais),
+                    updatedAt: new Date().toISOString()
+                };
+                try {
+                    if (editingResearchId) {
+                        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'researches', editingResearchId), data);
+                    } else {
+                        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'researches'), { ...data, createdAt: new Date().toISOString() });
+                    }
+                    setIsResearchModalOpen(false);
+                } catch (e) { console.error(e); }
+            };
+
+            const handleDeleteResearch = async (id) => {
+                if (confirm('Deseja realmente excluir esta pesquisa?')) {
+                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'researches', id));
+                }
+            };
+
+            const handleOpenModal = (step = null) => {
+                if (step) {
+                    setEditingStep(step);
+                    setFormData({ ...step });
+                } else {
+                    setEditingStep(null);
+                    setFormData({ title: '', description: '', detail: '', icon: 'clipboard-list' });
+                }
+                setIsModalOpen(true);
+            };
+
+            const handleSaveStep = async () => {
+                const currentSteps = [...(allFlows[activeFlowTab] || [])];
+                let updatedList;
+                if (editingStep) {
+                    updatedList = currentSteps.map(s => s.id === editingStep.id ? { ...s, ...formData } : s);
+                } else {
+                    updatedList = [...currentSteps, { id: Date.now().toString(), step: currentSteps.length + 1, ...formData }];
+                }
+                await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'workflow'), { ...allFlows, [activeFlowTab]: updatedList });
+                setIsModalOpen(false);
+            };
+
+            const handleDeleteStep = async (id) => {
+                const updatedList = (allFlows[activeFlowTab] || []).filter(s => s.id !== id).map((s, idx) => ({ ...s, step: idx + 1 }));
+                await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'workflow'), { ...allFlows, [activeFlowTab]: updatedList });
+            };
+
+            const filteredResearches = useMemo(() => {
+                return researches.filter(r => {
+                    const matchesSearch = r.nome?.toLowerCase().includes(searchTerm.toLowerCase());
+                    const matchesFluxo = filterFluxo === 'Todos' || r.fluxo === filterFluxo;
+                    const matchesStatus = filterStatus === 'Todos' || r.status === filterStatus;
+                    return matchesSearch && matchesFluxo && matchesStatus;
+                });
+            }, [researches, searchTerm, filterFluxo, filterStatus]);
+
+            const stats = {
+                total: researches.length,
+                noAr: researches.filter(r => r.status === 'No Ar').length,
+                naFila: researches.filter(r => r.status === 'Na Fila').length
+            };
+
+            const getStatusStyle = (s) => s === 'No Ar' ? 'bg-emerald-100 text-emerald-700' : s === 'Na Fila' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-700';
+            const getFluxoColor = (f) => f === 'Sazonal' ? 'text-orange-600 bg-orange-50' : f === 'On-demand' ? 'text-blue-600 bg-blue-50' : 'text-purple-600 bg-purple-50';
+
+            if (!user) return <div className="flex h-screen items-center justify-center"><Icon name="loader-2" className="animate-spin text-orange-600" size={32} /></div>;
+
+            return (
+                <div className="min-h-screen pb-12">
+                    <header className="bg-white border-b sticky top-0 z-30 shadow-sm no-print">
+                        <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+                            <div className="flex items-center gap-6">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-8 h-8 bg-orange-600 rounded-lg flex items-center justify-center">
+                                        <Icon name="bar-chart-3" className="text-white" />
+                                    </div>
+                                    <h1 className="text-xl font-black text-slate-800 tracking-tighter uppercase">Terra <span className="text-orange-600">Sales</span></h1>
+                                </div>
+                                <nav className="hidden md:flex gap-1">
+                                    <button onClick={() => setCurrentView('dashboard')} className={`px-4 py-2 text-sm font-bold rounded-lg ${currentView === 'dashboard' ? 'bg-orange-50 text-orange-600' : 'text-slate-500 hover:bg-slate-50'}`}>Dashboard</button>
+                                    <button onClick={() => setCurrentView('workflow')} className={`px-4 py-2 text-sm font-bold rounded-lg ${currentView === 'workflow' ? 'bg-orange-50 text-orange-600' : 'text-slate-500 hover:bg-slate-50'}`}>Fluxos</button>
+                                </nav>
+                            </div>
+                            <div className="flex items-center gap-4">
+                                <button onClick={handleExportPDF} className="px-3 py-2 text-slate-600 border rounded-lg text-sm font-bold flex gap-2"><Icon name="file-text" size={16} /> PDF</button>
+                                <button onClick={() => handleOpenResearchModal()} className="bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg hover:bg-orange-700 flex items-center gap-2"><Icon name="plus" size={16} /> Nova Pesquisa</button>
+                            </div>
+                        </div>
+                    </header>
+
+                    <main className="max-w-7xl mx-auto px-4 py-8">
+                        <div className="print-only-header">
+                            <h1 className="text-2xl font-black text-slate-800">Relatório Terra <span className="text-orange-600">Sales</span> | Pesquisas e Solicitantes</h1>
+                            <p className="text-xs text-slate-500">Extraído em {new Date().toLocaleDateString('pt-BR')} às {new Date().toLocaleTimeString('pt-BR')}</p>
+                        </div>
+
+                        {currentView === 'dashboard' ? (
+                            <div className="animate-fade-in">
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8 no-print">
+                                    <div className="bg-white p-6 rounded-2xl border shadow-sm"><p className="text-xs font-bold text-slate-400 mb-1 tracking-widest uppercase">Total de Pesquisas</p><p className="text-3xl font-black">{stats.total}</p></div>
+                                    <div className="bg-white p-6 rounded-2xl border-l-4 border-l-emerald-500 shadow-sm"><p className="text-xs font-bold text-slate-400 mb-1 tracking-widest uppercase">No Ar</p><p className="text-3xl font-black text-emerald-600">{stats.noAr}</p></div>
+                                    <div className="bg-white p-6 rounded-2xl border-l-4 border-l-amber-500 shadow-sm"><p className="text-xs font-bold text-slate-400 mb-1 tracking-widest uppercase">Na Fila</p><p className="text-3xl font-black text-amber-600">{stats.naFila}</p></div>
+                                </div>
+
+                                <div className="flex flex-col lg:flex-row gap-4 mb-6 no-print">
+                                    <div className="relative flex-1">
+                                        <input type="text" placeholder="Pesquisar por nome..." className="w-full pl-10 pr-4 py-2 rounded-xl border outline-none focus:ring-2 focus:ring-orange-500 font-medium" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                                        <div className="absolute left-3 top-2.5 text-slate-400"><Icon name="search" size={16} /></div>
+                                    </div>
+                                    <div className="flex gap-2 bg-slate-200 p-1 rounded-xl">
+                                        {['Todos', 'Sazonal', 'On-demand', 'Sonora Trends'].map(f => (
+                                            <button key={f} onClick={() => setFilterFluxo(f)} className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${filterFluxo === f ? 'bg-white shadow-sm text-orange-600' : 'text-slate-500'}`}>{f}</button>
+                                        ))}
+                                    </div>
+                                    <div className="flex gap-2 bg-slate-200 p-1 rounded-xl">
+                                        {['Todos', 'Na Fila', 'No Ar', 'Finalizada'].map(s => (
+                                            <button key={s} onClick={() => setFilterStatus(s)} className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${filterStatus === s ? 'bg-white shadow-sm text-orange-600' : 'text-slate-500'}`}>{s}</button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="bg-white rounded-2xl border shadow-sm overflow-hidden print-full-width">
+                                    <div className="grid grid-cols-12 bg-slate-50 p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b">
+                                        <div className="col-span-12 md:col-span-4">Pesquisa & Solicitante</div>
+                                        <div className="hidden md:block md:col-span-2">Fluxo</div>
+                                        <div className="hidden md:block md:col-span-2 text-center">Período</div>
+                                        <div className="hidden md:block md:col-span-2 print-hide-col">Progresso</div>
+                                        <div className="hidden md:block md:col-span-2 text-right">Status</div>
+                                    </div>
+                                    <div className="divide-y">
+                                        {filteredResearches.length > 0 ? filteredResearches.map(r => {
+                                            const progress = r.respondentesEsperados ? Math.min(100, (r.respondentesAtuais / r.respondentesEsperados) * 100) : 0;
+                                            return (
+                                                <div key={r.id} className="grid grid-cols-12 p-4 items-center hover:bg-slate-50 transition-colors group break-inside-avoid">
+                                                    <div className="col-span-12 md:col-span-4 flex items-center gap-3">
+                                                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 no-print transition-all">
+                                                            <button onClick={() => handleOpenResearchModal(r)} className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg"><Icon name="edit-2" size={14} /></button>
+                                                            <button onClick={() => handleDeleteResearch(r.id)} className="p-1.5 text-red-300 hover:text-red-500 hover:bg-red-50 rounded-lg"><Icon name="trash-2" size={14} /></button>
+                                                        </div>
+                                                        <div>
+                                                            <div className="font-bold text-slate-800">{r.nome}</div>
+                                                            <div className="text-xs text-slate-400 flex items-center gap-1"><Icon name="users" size={12} /> {r.solicitante}</div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="hidden md:block md:col-span-2">
+                                                        <span className={`text-[10px] font-black px-2 py-0.5 rounded ${getFluxoColor(r.fluxo)}`}>{r.fluxo}</span>
+                                                    </div>
+                                                    <div className="hidden md:block md:col-span-2 text-center text-xs text-slate-500">
+                                                        {r.dataInicio ? (
+                                                            <div>
+                                                                {new Date(r.dataInicio).toLocaleDateString('pt-BR')} <br/>
+                                                                <span className="text-[9px] font-bold opacity-40 uppercase">até {new Date(r.dataFim).toLocaleDateString('pt-BR')}</span>
+                                                            </div>
+                                                        ) : '--'}
+                                                    </div>
+                                                    <div className="hidden md:block md:col-span-2 print-hide-col px-4">
+                                                        <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden border">
+                                                            <div className={`h-full ${progress === 100 ? 'bg-emerald-500' : 'bg-orange-500'}`} style={{width: `${progress}%`}}></div>
+                                                        </div>
+                                                        <p className="text-[9px] text-slate-400 mt-1 font-bold">{r.respondentesAtuais} / {r.respondentesEsperados}</p>
+                                                    </div>
+                                                    <div className="col-span-12 md:col-span-2 flex justify-end">
+                                                        <span className={`text-[10px] font-black px-2 py-1 rounded-full border ${getStatusStyle(r.status)}`}>{r.status}</span>
+                                                    </div>
+                                                </div>
+                                            );
+                                        }) : (
+                                            <div className="p-12 text-center text-slate-400 italic">Nenhuma pesquisa encontrada.</div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="max-w-3xl mx-auto animate-fade-in print-full-width">
+                                <div className="text-center mb-8 no-print">
+                                    <h2 className="text-3xl font-black text-slate-800 tracking-tight">Manual de Fluxos Operacionais</h2>
+                                    <p className="text-slate-500 mt-2">Clique em cada fluxo para visualizar ou editar as etapas.</p>
+                                </div>
+                                <div className="flex bg-slate-200 p-1 rounded-2xl mb-12 no-print shadow-inner">
+                                    {Object.keys(allFlows).map(f => (
+                                        <button key={f} onClick={() => setActiveFlowTab(f)} className={`flex-1 py-3 rounded-xl text-sm font-black transition-all ${activeFlowTab === f ? 'bg-white text-orange-600 shadow-md' : 'text-slate-500 hover:text-slate-700'}`}>{f}</button>
+                                    ))}
+                                </div>
+                                <div className="space-y-6">
+                                    <div className="hidden print:block text-center mb-6 font-black text-orange-600 border-b pb-4 uppercase tracking-widest">Manual de Fluxo: {activeFlowTab}</div>
+                                    {(allFlows[activeFlowTab] || []).map((s, idx) => (
+                                        <div key={s.id} className="flex gap-6 group break-inside-avoid">
+                                            <div className="flex flex-col items-center">
+                                                <div className="w-10 h-10 rounded-full border-2 border-orange-500 bg-white text-orange-600 flex items-center justify-center font-black text-sm">{s.step}</div>
+                                                {idx !== allFlows[activeFlowTab].length - 1 && <div className="w-0.5 h-full bg-slate-200 my-2"></div>}
+                                            </div>
+                                            <div className="flex-1 pb-8">
+                                                <div className="bg-white p-5 rounded-2xl border shadow-sm relative group-hover:shadow-md transition-all">
+                                                    <div className="flex justify-between items-start">
+                                                        <div className="flex items-center gap-4">
+                                                            <div className="p-2 bg-orange-50 text-orange-600 rounded-lg"><Icon name={s.icon || 'clipboard-list'} /></div>
+                                                            <div>
+                                                                <h3 className="font-bold text-slate-800">{s.title}</h3>
+                                                                <p className="text-sm text-slate-500 mt-1">{s.description}</p>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 no-print transition-all">
+                                                            <button onClick={() => handleOpenModal(s)} className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg"><Icon name="edit-2" size={14} /></button>
+                                                            <button onClick={() => handleDeleteStep(s.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg"><Icon name="trash-2" size={14} /></button>
+                                                        </div>
+                                                    </div>
+                                                    <div className="mt-4 pt-4 border-t text-[10px] text-slate-400 italic flex items-center gap-1">
+                                                        <Icon name="info" size={10} /> {s.detail || 'Sem observações técnicas.'}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    <button onClick={() => handleOpenModal()} className="w-full py-4 border-2 border-dashed border-slate-300 rounded-2xl text-slate-400 font-bold hover:border-orange-500 hover:text-orange-600 no-print transition-all">+ Adicionar Etapa</button>
+                                </div>
+                            </div>
+                        )}
+                    </main>
+
+                    {/* Modais com visibilidade no-print garantida */}
+                    {isModalOpen && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 no-print">
+                            <div className="bg-white rounded-3xl w-full max-md shadow-2xl animate-fade-in overflow-hidden">
+                                <div className="p-6 border-b flex justify-between items-center bg-slate-50">
+                                    <h3 className="font-black text-slate-800">{editingStep ? 'Editar Etapa' : 'Nova Etapa'}</h3>
+                                    <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-slate-200 rounded-full transition-colors"><Icon name="x" /></button>
+                                </div>
+                                <div className="p-6 space-y-4">
+                                    <input type="text" className="w-full px-4 py-2 bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-orange-500" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} placeholder="Título da Etapa" />
+                                    <textarea className="w-full px-4 py-2 bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-orange-500 h-20" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} placeholder="Descrição" />
+                                    <input type="text" className="w-full px-4 py-2 bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-orange-500" value={formData.detail} onChange={e => setFormData({...formData, detail: e.target.value})} placeholder="Dica técnica" />
+                                    <select className="w-full px-4 py-2 bg-slate-50 border rounded-xl outline-none" value={formData.icon} onChange={e => setFormData({...formData, icon: e.target.value})}>
+                                        <option value="clipboard-list">📋 Briefing</option>
+                                        <option value="file-edit">📝 Criação / Edição</option>
+                                        <option value="send">🚀 Veiculação / Akross</option>
+                                        <option value="zap">⚡ Agilidade / On-demand</option>
+                                        <option value="music">🎵 Música / Sonora</option>
+                                        <option value="check-circle">✅ Validação / Finalizado</option>
+                                        <option value="bar-chart">📊 Relatórios</option>
+                                    </select>
+                                </div>
+                                <div className="p-6 bg-slate-50 flex gap-2">
+                                    <button onClick={() => setIsModalOpen(false)} className="flex-1 py-3 font-bold text-slate-500 hover:text-slate-800">Cancelar</button>
+                                    <button onClick={handleSaveStep} className="flex-1 py-3 bg-orange-600 text-white rounded-xl font-bold hover:bg-orange-700">Salvar Etapa</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {isResearchModalOpen && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 no-print">
+                            <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl animate-fade-in overflow-hidden">
+                                <div className="p-6 border-b flex justify-between items-center bg-slate-50">
+                                    <h3 className="font-black text-slate-800 text-xl">{editingResearchId ? 'Editar Pesquisa' : 'Nova Pesquisa'}</h3>
+                                    <button onClick={() => setIsResearchModalOpen(false)} className="p-2 hover:bg-slate-200 rounded-full transition-colors"><Icon name="x" /></button>
+                                </div>
+                                <div className="p-6 grid grid-cols-2 gap-4">
+                                    <div className="col-span-2">
+                                        <label className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Nome</label>
+                                        <input type="text" className="w-full px-4 py-2.5 bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-orange-500" value={researchFormData.nome} onChange={e => setResearchFormData({...researchFormData, nome: e.target.value})} placeholder="Nome da Pesquisa" />
+                                    </div>
+                                    <div className="col-span-2">
+                                        <label className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Solicitante</label>
+                                        <input type="text" className="w-full px-4 py-2.5 bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-orange-500" value={researchFormData.solicitante} onChange={e => setResearchFormData({...researchFormData, solicitante: e.target.value})} placeholder="Solicitante" />
+                                    </div>
+                                    <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Início</label><input type="date" className="w-full px-4 py-2.5 bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-orange-500" value={researchFormData.dataInicio} onChange={e => setResearchFormData({...researchFormData, dataInicio: e.target.value})} /></div>
+                                    <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Fim</label><input type="date" className="w-full px-4 py-2.5 bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-orange-500" value={researchFormData.dataFim} onChange={e => setResearchFormData({...researchFormData, dataFim: e.target.value})} /></div>
+                                    <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Meta</label><input type="number" className="w-full px-4 py-2.5 bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-orange-500" value={researchFormData.respondentesEsperados} onChange={e => setResearchFormData({...researchFormData, respondentesEsperados: e.target.value})} /></div>
+                                    <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Coletados</label><input type="number" className="w-full px-4 py-2.5 bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-orange-500" value={researchFormData.respondentesAtuais} onChange={e => setResearchFormData({...researchFormData, respondentesAtuais: e.target.value})} /></div>
+                                    <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Fluxo</label><select className="w-full px-4 py-2.5 bg-slate-50 border rounded-xl outline-none" value={researchFormData.fluxo} onChange={e => setResearchFormData({...researchFormData, fluxo: e.target.value})}><option value="Sazonal">Sazonal</option><option value="On-demand">On-demand</option><option value="Sonora Trends">Sonora Trends</option></select></div>
+                                    <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Status</label><select className="w-full px-4 py-2.5 bg-slate-50 border rounded-xl outline-none" value={researchFormData.status} onChange={e => setResearchFormData({...researchFormData, status: e.target.value})}><option value="Na Fila">Na Fila</option><option value="No Ar">No Ar</option><option value="Finalizada">Finalizada</option></select></div>
+                                </div>
+                                <div className="p-6 bg-slate-50 flex gap-2">
+                                    <button onClick={() => setIsResearchModalOpen(false)} className="flex-1 py-3 font-bold text-slate-500 hover:text-slate-800">Cancelar</button>
+                                    <button onClick={handleSaveResearch} className="flex-1 py-3 bg-orange-600 text-white rounded-xl font-bold hover:bg-orange-700 shadow-lg flex justify-center gap-2 items-center"><Icon name="save" /> Salvar Pesquisa</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
+    
+  </body>
+  
+</html>

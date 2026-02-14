@@ -105,7 +105,8 @@
             const [editingResearchId, setEditingResearchId] = useState(null);
             const [researchFormData, setResearchFormData] = useState({
                 nome: '', solicitante: '', dataInicio: '', dataFim: '',
-                status: 'Na Fila', respondentesEsperados: 0, respondentesAtuais: 0, fluxo: 'Sazonal'
+                status: 'Na Fila', respondentesEsperados: 0, respondentesAtuais: 0, fluxo: 'Sazonal',
+                tabulacao: false, analiseInsights: false, criacaoPPT: false
             });
 
             useEffect(() => {
@@ -151,12 +152,18 @@
             const handleOpenResearchModal = (research = null) => {
                 if (research) {
                     setEditingResearchId(research.id);
-                    setResearchFormData({ ...research });
+                    setResearchFormData({
+                        ...research,
+                        tabulacao: research.tabulacao || false,
+                        analiseInsights: research.analiseInsights || false,
+                        criacaoPPT: research.criacaoPPT || false
+                    });
                 } else {
                     setEditingResearchId(null);
                     setResearchFormData({
                         nome: '', solicitante: '', dataInicio: '', dataFim: '',
-                        status: 'Na Fila', respondentesEsperados: 0, respondentesAtuais: 0, fluxo: 'Sazonal'
+                        status: 'Na Fila', respondentesEsperados: 0, respondentesAtuais: 0, fluxo: 'Sazonal',
+                        tabulacao: false, analiseInsights: false, criacaoPPT: false
                     });
                 }
                 setIsResearchModalOpen(true);
@@ -253,7 +260,7 @@
                             </div>
                             <div className="flex items-center gap-4">
                                 <button onClick={handleExportPDF} className="px-3 py-2 text-slate-600 border rounded-lg text-sm font-bold flex gap-2"><Icon name="file-text" size={16} /> PDF</button>
-                                <button onClick={() => handleOpenResearchModal()} className="bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg hover:bg-orange-700 flex items-center gap-2"><Icon name="plus" size={16} /> Nova Pesquisa</button>
+                                <button onClick={() => handleOpenResearchModal()} className="bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg hover:bg-orange-700 flex items-center gap-2 active:scale-95"><Icon name="plus" size={16} /> Nova Pesquisa</button>
                             </div>
                         </div>
                     </header>
@@ -303,14 +310,36 @@
                                             const progress = r.respondentesEsperados ? Math.min(100, (r.respondentesAtuais / r.respondentesEsperados) * 100) : 0;
                                             return (
                                                 <div key={r.id} className="grid grid-cols-12 p-4 items-center hover:bg-slate-50 transition-colors group break-inside-avoid">
-                                                    <div className="col-span-12 md:col-span-4 flex items-center gap-4">
-                                                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 no-print transition-all">
+                                                    <div className="col-span-12 md:col-span-4 flex items-start gap-4">
+                                                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 no-print transition-all pt-1">
                                                             <button onClick={() => handleOpenResearchModal(r)} className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg"><Icon name="edit-2" size={14} /></button>
                                                             <button onClick={() => handleDeleteResearch(r.id)} className="p-1.5 text-red-300 hover:text-red-500 hover:bg-red-50 rounded-lg"><Icon name="trash-2" size={14} /></button>
                                                         </div>
-                                                        <div>
+                                                        <div className="flex-1">
                                                             <div className="text-lg font-bold text-slate-800 leading-tight group-hover:text-orange-600 transition-colors">{r.nome}</div>
                                                             <div className="text-sm text-slate-500 flex items-center gap-1.5 mt-0.5"><Icon name="users" size={14} className="opacity-60" /> {r.solicitante}</div>
+                                                            
+                                                            {/* Checkboxes de Etapas Operacionais */}
+                                                            <div className="flex gap-4 mt-3 no-print">
+                                                                <div className="flex items-center gap-1.5 opacity-80 hover:opacity-100 cursor-default transition-opacity">
+                                                                    <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center ${r.tabulacao ? 'bg-orange-500 border-orange-500' : 'border-slate-300 bg-white'}`}>
+                                                                        {r.tabulacao && <Icon name="check" size={10} className="text-white" />}
+                                                                    </div>
+                                                                    <span className="text-[10px] font-bold text-slate-600">Tabulação</span>
+                                                                </div>
+                                                                <div className="flex items-center gap-1.5 opacity-80 hover:opacity-100 cursor-default transition-opacity">
+                                                                    <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center ${r.analiseInsights ? 'bg-orange-500 border-orange-500' : 'border-slate-300 bg-white'}`}>
+                                                                        {r.analiseInsights && <Icon name="check" size={10} className="text-white" />}
+                                                                    </div>
+                                                                    <span className="text-[10px] font-bold text-slate-600">Análise & Insights</span>
+                                                                </div>
+                                                                <div className="flex items-center gap-1.5 opacity-80 hover:opacity-100 cursor-default transition-opacity">
+                                                                    <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center ${r.criacaoPPT ? 'bg-orange-500 border-orange-500' : 'border-slate-300 bg-white'}`}>
+                                                                        {r.criacaoPPT && <Icon name="check" size={10} className="text-white" />}
+                                                                    </div>
+                                                                    <span className="text-[10px] font-bold text-slate-600">Criação do PPT</span>
+                                                                </div>
+                                                            </div>
                                                         </div>
                                                     </div>
                                                     <div className="hidden md:block md:col-span-2">
@@ -371,8 +400,8 @@
                                                             </div>
                                                         </div>
                                                         <div className="flex gap-1 opacity-0 group-hover:opacity-100 no-print transition-all">
-                                                            <button onClick={() => handleOpenModal(s)} className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg"><Icon name="edit-2" size={14} /></button>
-                                                            <button onClick={() => handleDeleteStep(s.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg"><Icon name="trash-2" size={14} /></button>
+                                                            <button onClick={() => handleOpenModal(s)} className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg" title="Editar"><Icon name="edit-2" size={14} /></button>
+                                                            <button onClick={() => handleDeleteStep(s.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg" title="Excluir"><Icon name="trash-2" size={14} /></button>
                                                         </div>
                                                     </div>
                                                     <div className="mt-4 pt-4 border-t text-[10px] text-slate-400 italic flex items-center gap-1">
@@ -388,7 +417,7 @@
                         )}
                     </main>
 
-                    {/* Modais */}
+                    {/* Modal de Etapa do Fluxo */}
                     {isModalOpen && (
                         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 no-print">
                             <div className="bg-white rounded-3xl w-full max-md shadow-2xl animate-fade-in overflow-hidden">
@@ -418,6 +447,7 @@
                         </div>
                     )}
 
+                    {/* Modal de Pesquisa (Nova/Edição) com Checkboxes Operacionais */}
                     {isResearchModalOpen && (
                         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 no-print">
                             <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl animate-fade-in overflow-hidden">
@@ -425,7 +455,7 @@
                                     <h3 className="font-black text-slate-800 text-xl">{editingResearchId ? 'Editar Pesquisa' : 'Nova Pesquisa'}</h3>
                                     <button onClick={() => setIsResearchModalOpen(false)} className="p-2 hover:bg-slate-200 rounded-full transition-colors"><Icon name="x" /></button>
                                 </div>
-                                <div className="p-6 grid grid-cols-2 gap-4">
+                                <div className="p-6 grid grid-cols-2 gap-4 max-h-[75vh] overflow-y-auto">
                                     <div className="col-span-2">
                                         <label className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Nome</label>
                                         <input type="text" className="w-full px-4 py-2.5 bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-orange-500" value={researchFormData.nome} onChange={e => setResearchFormData({...researchFormData, nome: e.target.value})} placeholder="Nome da Pesquisa" />
@@ -440,10 +470,29 @@
                                     <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Coletados</label><input type="number" className="w-full px-4 py-2.5 bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-orange-500" value={researchFormData.respondentesAtuais} onChange={e => setResearchFormData({...researchFormData, respondentesAtuais: e.target.value})} /></div>
                                     <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Fluxo</label><select className="w-full px-4 py-2.5 bg-slate-50 border rounded-xl outline-none" value={researchFormData.fluxo} onChange={e => setResearchFormData({...researchFormData, fluxo: e.target.value})}><option value="Sazonal">Sazonal</option><option value="On-demand">On-demand</option><option value="Sonora Trends">Sonora Trends</option></select></div>
                                     <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Status</label><select className="w-full px-4 py-2.5 bg-slate-50 border rounded-xl outline-none" value={researchFormData.status} onChange={e => setResearchFormData({...researchFormData, status: e.target.value})}><option value="Na Fila">Na Fila</option><option value="No Ar">No Ar</option><option value="Finalizada">Finalizada</option></select></div>
+                                    
+                                    {/* SEÇÃO DE CHECKBOXES OPERACIONAIS */}
+                                    <div className="col-span-2 pt-2 border-t mt-2">
+                                        <label className="text-[10px] font-black uppercase text-orange-600 ml-1 block mb-3">Etapas Operacionais</label>
+                                        <div className="space-y-2">
+                                            <label className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer border border-transparent hover:border-slate-200">
+                                                <input type="checkbox" className="w-4 h-4 accent-orange-600" checked={researchFormData.tabulacao} onChange={e => setResearchFormData({...researchFormData, tabulacao: e.target.checked})} />
+                                                <span className="text-sm font-bold text-slate-700">1. Tabulação</span>
+                                            </label>
+                                            <label className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer border border-transparent hover:border-slate-200">
+                                                <input type="checkbox" className="w-4 h-4 accent-orange-600" checked={researchFormData.analiseInsights} onChange={e => setResearchFormData({...researchFormData, analiseInsights: e.target.checked})} />
+                                                <span className="text-sm font-bold text-slate-700">2. Análise & Insights</span>
+                                            </label>
+                                            <label className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer border border-transparent hover:border-slate-200">
+                                                <input type="checkbox" className="w-4 h-4 accent-orange-600" checked={researchFormData.criacaoPPT} onChange={e => setResearchFormData({...researchFormData, criacaoPPT: e.target.checked})} />
+                                                <span className="text-sm font-bold text-slate-700">3. Criação do PPT</span>
+                                            </label>
+                                        </div>
+                                    </div>
                                 </div>
                                 <div className="p-6 bg-slate-50 flex gap-2">
                                     <button onClick={() => setIsResearchModalOpen(false)} className="flex-1 py-3 font-bold text-slate-500 hover:text-slate-800">Cancelar</button>
-                                    <button onClick={handleSaveResearch} className="flex-1 py-3 bg-orange-600 text-white rounded-xl font-bold hover:bg-orange-700 shadow-lg flex justify-center gap-2 items-center"><Icon name="save" /> Salvar Pesquisa</button>
+                                    <button onClick={handleSaveResearch} className="flex-1 py-3 bg-orange-600 text-white rounded-xl font-bold hover:bg-orange-700 shadow-lg flex justify-center gap-2 items-center active:scale-95 transition-transform"><Icon name="save" /> Salvar Pesquisa</button>
                                 </div>
                             </div>
                         </div>

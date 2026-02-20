@@ -22,20 +22,44 @@
         /* Estilos específicos para Impressão/PDF */
         @media print {
             .no-print { display: none !important; }
-            body { background-color: white !important; }
+            body { background-color: white !important; padding: 0 !important; }
             main { padding: 0 !important; margin: 0 !important; max-width: 100% !important; }
-            .bg-white { border: 1px solid #e2e8f0 !important; border-radius: 0 !important; }
-            .shadow-sm, .shadow-lg { box-shadow: none !important; }
+            .print-container { width: 100% !important; border: none !important; }
             
+            /* Compactação da Tabela de Briefing para caber em 1 página */
+            .briefing-table { width: 100% !important; border: 1.5px solid black !important; table-layout: fixed; }
+            .briefing-table th, .briefing-table td { 
+                border: 1px solid black !important; 
+                padding: 4px 8px !important; 
+                font-size: 10px !important;
+                line-height: 1.2 !important;
+                -webkit-print-color-adjust: exact; 
+            }
+            .briefing-table input, .briefing-table select, .briefing-table textarea {
+                font-size: 10px !important;
+                padding: 2px !important;
+                border: none !important;
+            }
+            .briefing-table textarea { height: auto !important; min-height: 40px !important; }
+            .briefing-table .bg-orange-header { background-color: #ed7d31 !important; color: white !important; font-weight: bold !important; text-align: center !important; font-size: 11px !important; }
+            
+            /* Tabela de Dashboard no PDF */
             .print-full-width { width: 100% !important; border: none !important; display: block !important; }
-            
             .print-only-header { 
                 display: block !important; 
-                margin-bottom: 20px; 
+                margin-bottom: 15px; 
                 padding-bottom: 10px; 
-                border-bottom: 2px solid #ea580c;
             }
-            .print-hide-col { display: none !important; }
+            .print-summary-box {
+                display: grid !important;
+                grid-template-columns: repeat(4, 1fr) !important;
+                gap: 10px !important;
+                margin-bottom: 20px !important;
+                border: 1px solid #e2e8f0 !important;
+                padding: 10px !important;
+                background-color: #f8fafc !important;
+                -webkit-print-color-adjust: exact;
+            }
         }
         .print-only-header { display: none; }
     </style>
@@ -50,7 +74,6 @@
 
         const { useState, useMemo, useEffect, useRef, useLayoutEffect } = React;
 
-        // --- Configuração Firebase ---
         const firebaseConfig = typeof __firebase_config !== 'undefined' 
             ? JSON.parse(__firebase_config) 
             : {
@@ -67,22 +90,14 @@
         const db = getFirestore(app);
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'terra-sales-app';
 
-        // --- Componente de Ícone Corrigido ---
         const Icon = ({ name, size = 18, className = "" }) => {
             const iconRef = useRef(null);
-            
             useLayoutEffect(() => {
                 if (window.lucide && iconRef.current) {
                     iconRef.current.innerHTML = `<i data-lucide="${name}"></i>`;
-                    window.lucide.createIcons({
-                        attrs: {
-                            class: className,
-                            style: `width: ${size}px; height: ${size}px;`
-                        }
-                    });
+                    window.lucide.createIcons({ attrs: { class: className, style: `width: ${size}px; height: ${size}px;` } });
                 }
             }, [name, size, className]);
-
             return <span ref={iconRef} className="inline-flex items-center justify-center leading-none" style={{ width: size, height: size }}></span>;
         };
 
@@ -94,12 +109,35 @@
             const [filterFluxo, setFilterFluxo] = useState('Todos');
             const [filterStatus, setFilterStatus] = useState('Todos');
 
-            const [allFlows, setAllFlows] = useState({ 'Sazonal': [], 'On-demand': [], 'Sonora Trends': [] });
             const [researches, setResearches] = useState([]);
+            const [allFlows, setAllFlows] = useState({});
+            
+            const [briefingData, setBriefingData] = useState({
+                anunciante: 'Terra',
+                vertical: 'SVA Interno',
+                canal: 'Vivo Internet Grátis',
+                nomeCampanha: '',
+                formato: 'Enquete',
+                kpi: 'Respostas Corretas',
+                dataInicio: '',
+                dataFim: '',
+                volumeContratado: '10.000',
+                segmentacao: 'NA',
+                urlRedirecionamento: 'NA',
+                bonificacao: '50 MB',
+                frequencia: '1 por resposta',
+                limiteDia: 'NA',
+                tituloCampanha: 'Clique, responda e ganhe 50MB!',
+                camposFormulario: 'Questionário segue anexo ao email'
+            });
 
-            const [isModalOpen, setIsModalOpen] = useState(false);
-            const [editingStep, setEditingStep] = useState(null);
-            const [formData, setFormData] = useState({ title: '', description: '', detail: '', icon: 'clipboard-list' });
+            const options = {
+                vertical: ["Alimentos & Bebidas", "Autos", "Bandeiras de Cartão", "Beauty", "BET", "CPG", "E-commerce", "Educação", "Fashion & Mall", "Fidelidade", "Finance", "Games", "Governo Estadual", "Governo Federal", "Imobiliário", "Indústria", "Long Tail", "Mídia e Entretenimento", "Mobilidade", "Moda", "Óleo e Gás", "Plataformas", "Regionais", "Saúde", "Seguros", "SVA Interno", "Tecnologia", "Turismo", "Varejo"],
+                formatos: ["Lead Off Site", "Lead Recompensa", "Clique Recompensa", "Video Recompensa", "App Install", "Enquete", "Aquisição"],
+                metrics: ["Leads Qualificados", "Vídeos Completo", "Impressões", "Respostas Corretas", "Cliques/ Redirecionamentos", "Aquisição", "Instalação de app"],
+                bonificacao: ["20 MB", "50 MB", "100 MB", "500 MB", "1 G"],
+                canais: ["Vivo Internet Grátis", "Vivo Free", "Ambos"]
+            };
 
             const [isResearchModalOpen, setIsResearchModalOpen] = useState(false);
             const [editingResearchId, setEditingResearchId] = useState(null);
@@ -109,6 +147,10 @@
                 tabulacao: false, analiseInsights: false, criacaoPPT: false
             });
 
+            const [isModalOpen, setIsModalOpen] = useState(false);
+            const [editingStep, setEditingStep] = useState(null);
+            const [formData, setFormData] = useState({ title: '', description: '', detail: '', icon: 'clipboard-list', sla: '' });
+
             useEffect(() => {
                 const initAuth = async () => {
                     try {
@@ -117,47 +159,36 @@
                         } else {
                             await signInAnonymously(auth);
                         }
-                    } catch (error) {
-                        console.error("Erro na autenticação:", error);
-                    }
+                    } catch (error) { console.error(error); }
                 };
                 initAuth();
-                const unsubscribe = onAuthStateChanged(auth, setUser);
-                return () => unsubscribe();
+                onAuthStateChanged(auth, setUser);
             }, []);
 
             useEffect(() => {
                 if (!user) return;
-
-                const flowsDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'workflow');
-                const unsubFlows = onSnapshot(flowsDocRef, (docSnap) => {
-                    if (docSnap.exists()) {
-                        setAllFlows(docSnap.data());
-                    } else {
-                        setDoc(flowsDocRef, { 'Sazonal': [], 'On-demand': [], 'Sonora Trends': [] });
-                    }
-                }, (error) => console.error(error));
-
-                const researchesColl = collection(db, 'artifacts', appId, 'public', 'data', 'researches');
-                const unsubResearches = onSnapshot(researchesColl, (snapshot) => {
-                    const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    setResearches(data);
-                }, (error) => console.error(error));
-
-                return () => { unsubFlows(); unsubResearches(); };
+                onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'researches'), (snapshot) => {
+                    setResearches(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                });
+                onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'workflow'), (docSnap) => {
+                    if (docSnap.exists()) setAllFlows(docSnap.data());
+                });
+                onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'last_briefing'), (docSnap) => {
+                    if (docSnap.exists()) setBriefingData(docSnap.data());
+                });
             }, [user]);
+
+            const saveBriefing = async () => {
+                await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'last_briefing'), briefingData);
+                alert("Briefing salvo com sucesso!");
+            };
 
             const handleExportPDF = () => window.print();
 
             const handleOpenResearchModal = (research = null) => {
                 if (research) {
                     setEditingResearchId(research.id);
-                    setResearchFormData({
-                        ...research,
-                        tabulacao: research.tabulacao || false,
-                        analiseInsights: research.analiseInsights || false,
-                        criacaoPPT: research.criacaoPPT || false
-                    });
+                    setResearchFormData({ ...research });
                 } else {
                     setEditingResearchId(null);
                     setResearchFormData({
@@ -170,48 +201,29 @@
             };
 
             const handleSaveResearch = async () => {
-                if (!user) return;
-                const data = {
-                    ...researchFormData,
-                    respondentesEsperados: Number(researchFormData.respondentesEsperados),
-                    respondentesAtuais: Number(researchFormData.respondentesAtuais),
-                    updatedAt: new Date().toISOString()
-                };
-                try {
-                    if (editingResearchId) {
-                        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'researches', editingResearchId), data);
-                    } else {
-                        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'researches'), { ...data, createdAt: new Date().toISOString() });
-                    }
-                    setIsResearchModalOpen(false);
-                } catch (e) { console.error(e); }
+                const data = { ...researchFormData, updatedAt: new Date().toISOString() };
+                if (editingResearchId) {
+                    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'researches', editingResearchId), data);
+                } else {
+                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'researches'), { ...data, createdAt: new Date().toISOString() });
+                }
+                setIsResearchModalOpen(false);
             };
 
             const handleDeleteResearch = async (id) => {
-                if (confirm('Deseja realmente excluir esta pesquisa?')) {
-                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'researches', id));
-                }
+                if (confirm('Excluir esta pesquisa?')) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'researches', id));
             };
 
             const handleOpenModal = (step = null) => {
-                if (step) {
-                    setEditingStep(step);
-                    setFormData({ ...step });
-                } else {
-                    setEditingStep(null);
-                    setFormData({ title: '', description: '', detail: '', icon: 'clipboard-list' });
-                }
+                if (step) { setEditingStep(step); setFormData({ ...step }); }
+                else { setEditingStep(null); setFormData({ title: '', description: '', detail: '', icon: 'clipboard-list', sla: '' }); }
                 setIsModalOpen(true);
             };
 
             const handleSaveStep = async () => {
                 const currentSteps = [...(allFlows[activeFlowTab] || [])];
-                let updatedList;
-                if (editingStep) {
-                    updatedList = currentSteps.map(s => s.id === editingStep.id ? { ...s, ...formData } : s);
-                } else {
-                    updatedList = [...currentSteps, { id: Date.now().toString(), step: currentSteps.length + 1, ...formData }];
-                }
+                let updatedList = editingStep ? currentSteps.map(s => s.id === editingStep.id ? { ...s, ...formData } : s) 
+                                              : [...currentSteps, { id: Date.now().toString(), step: currentSteps.length + 1, ...formData }];
                 await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'workflow'), { ...allFlows, [activeFlowTab]: updatedList });
                 setIsModalOpen(false);
             };
@@ -223,7 +235,7 @@
 
             const filteredResearches = useMemo(() => {
                 return researches.filter(r => {
-                    const matchesSearch = r.nome?.toLowerCase().includes(searchTerm.toLowerCase());
+                    const matchesSearch = r.nome?.toLowerCase().includes(searchTerm.toLowerCase()) || r.solicitante?.toLowerCase().includes(searchTerm.toLowerCase());
                     const matchesFluxo = filterFluxo === 'Todos' || r.fluxo === filterFluxo;
                     const matchesStatus = filterStatus === 'Todos' || r.status === filterStatus;
                     return matchesSearch && matchesFluxo && matchesStatus;
@@ -237,7 +249,7 @@
                 finalizadas: researches.filter(r => r.status === 'Finalizada').length
             };
 
-            const getStatusStyle = (s) => s === 'No Ar' ? 'bg-emerald-100 text-emerald-700' : s === 'Na Fila' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-700';
+            const getStatusStyle = (s) => s === 'No Ar' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : s === 'Na Fila' ? 'bg-amber-100 text-amber-700 border-amber-200' : 'bg-slate-100 text-slate-700 border-slate-200';
             const getFluxoColor = (f) => f === 'Sazonal' ? 'text-orange-600 bg-orange-50' : f === 'On-demand' ? 'text-blue-600 bg-blue-50' : 'text-purple-600 bg-purple-50';
 
             if (!user) return <div className="flex h-screen items-center justify-center"><Icon name="loader-2" className="animate-spin text-orange-600" size={32} /></div>;
@@ -248,97 +260,103 @@
                         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
                             <div className="flex items-center gap-6">
                                 <div className="flex items-center gap-2">
-                                    <div className="w-8 h-8 bg-orange-600 rounded-lg flex items-center justify-center">
-                                        <Icon name="bar-chart-3" className="text-white" />
-                                    </div>
+                                    <div className="w-8 h-8 bg-orange-600 rounded-lg flex items-center justify-center"><Icon name="bar-chart-3" className="text-white" /></div>
                                     <h1 className="text-xl font-black text-slate-800 tracking-tighter uppercase">Terra <span className="text-orange-600">Sales</span></h1>
                                 </div>
                                 <nav className="hidden md:flex gap-1">
-                                    <button onClick={() => setCurrentView('dashboard')} className={`px-4 py-2 text-sm font-bold rounded-lg transition-colors ${currentView === 'dashboard' ? 'bg-orange-50 text-orange-600' : 'text-slate-500 hover:bg-slate-50'}`}>Dashboard</button>
-                                    <button onClick={() => setCurrentView('workflow')} className={`px-4 py-2 text-sm font-bold rounded-lg transition-colors ${currentView === 'workflow' ? 'bg-orange-50 text-orange-600' : 'text-slate-500 hover:bg-slate-50'}`}>Fluxos</button>
+                                    <button onClick={() => setCurrentView('dashboard')} className={`px-4 py-2 text-sm font-bold rounded-lg ${currentView === 'dashboard' ? 'bg-orange-50 text-orange-600' : 'text-slate-500 hover:bg-slate-50'}`}>Dashboard</button>
+                                    <button onClick={() => setCurrentView('workflow')} className={`px-4 py-2 text-sm font-bold rounded-lg ${currentView === 'workflow' ? 'bg-orange-50 text-orange-600' : 'text-slate-500 hover:bg-slate-50'}`}>Fluxos</button>
+                                    <button onClick={() => setCurrentView('briefing')} className={`px-4 py-2 text-sm font-bold rounded-lg ${currentView === 'briefing' ? 'bg-orange-50 text-orange-600' : 'text-slate-500 hover:bg-slate-50'}`}>Briefing Akross</button>
                                 </nav>
                             </div>
                             <div className="flex items-center gap-4">
-                                <button onClick={handleExportPDF} className="px-3 py-2 text-slate-600 border rounded-lg text-sm font-bold flex gap-2"><Icon name="file-text" size={16} /> PDF</button>
+                                <button onClick={handleExportPDF} className="px-3 py-2 text-slate-600 border rounded-lg text-sm font-bold flex gap-2 hover:bg-slate-50 transition-all"><Icon name="printer" size={16} /> Exportar PDF</button>
                                 <button onClick={() => handleOpenResearchModal()} className="bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg hover:bg-orange-700 flex items-center gap-2 active:scale-95"><Icon name="plus" size={16} /> Nova Pesquisa</button>
                             </div>
                         </div>
                     </header>
 
                     <main className="max-w-7xl mx-auto px-4 py-8">
+                        
+                        {/* Print Header Logic */}
                         <div className="print-only-header">
-                            <h1 className="text-2xl font-black text-slate-800">Relatório Terra <span className="text-orange-600">Sales</span> | Pesquisas e Solicitantes</h1>
-                            <p className="text-xs text-slate-500">Extraído em {new Date().toLocaleDateString('pt-BR')} às {new Date().toLocaleTimeString('pt-BR')}</p>
+                            <div className="flex items-center justify-between border-b-2 border-orange-600 pb-2 mb-4">
+                                <h1 className="text-2xl font-black text-slate-800 uppercase">Terra <span className="text-orange-600">Sales</span></h1>
+                                <p className="text-xs text-slate-500 font-bold uppercase">{currentView === 'dashboard' ? 'Dashboard de Pesquisas' : currentView === 'briefing' ? 'Briefing Akross' : 'Manual de Fluxos'}</p>
+                            </div>
+                            {currentView === 'dashboard' && (
+                                <div className="print-summary-box">
+                                    <div className="text-center border-r border-slate-200">
+                                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Total</p>
+                                        <p className="text-lg font-black text-slate-800">{stats.total}</p>
+                                    </div>
+                                    <div className="text-center border-r border-slate-200">
+                                        <p className="text-[8px] font-black text-emerald-500 uppercase tracking-widest">No Ar</p>
+                                        <p className="text-lg font-black text-emerald-600">{stats.noAr}</p>
+                                    </div>
+                                    <div className="text-center border-r border-slate-200">
+                                        <p className="text-[8px] font-black text-amber-500 uppercase tracking-widest">Na Fila</p>
+                                        <p className="text-lg font-black text-amber-600">{stats.naFila}</p>
+                                    </div>
+                                    <div className="text-center">
+                                        <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Finais</p>
+                                        <p className="text-lg font-black text-slate-600">{stats.finalizadas}</p>
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
-                        {currentView === 'dashboard' ? (
+                        {currentView === 'dashboard' && (
                             <div className="animate-fade-in">
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8 no-print">
-                                    <div className="bg-white p-6 rounded-2xl border shadow-sm"><p className="text-xs font-bold text-slate-400 mb-1 tracking-widest uppercase">Total de Pesquisas</p><p className="text-3xl font-black">{stats.total}</p></div>
-                                    <div className="bg-white p-6 rounded-2xl border-l-4 border-l-emerald-500 shadow-sm"><p className="text-xs font-bold text-slate-400 mb-1 tracking-widest uppercase">No Ar</p><p className="text-3xl font-black text-emerald-600">{stats.noAr}</p></div>
-                                    <div className="bg-white p-6 rounded-2xl border-l-4 border-l-amber-500 shadow-sm"><p className="text-xs font-bold text-slate-400 mb-1 tracking-widest uppercase">Na Fila</p><p className="text-3xl font-black text-amber-600">{stats.naFila}</p></div>
-                                    <div className="bg-white p-6 rounded-2xl border-l-4 border-l-slate-400 shadow-sm"><p className="text-xs font-bold text-slate-400 mb-1 tracking-widest uppercase">Finalizadas</p><p className="text-3xl font-black text-slate-600">{stats.finalizadas}</p></div>
+                                    <div className="bg-white p-6 rounded-2xl border shadow-sm"><p className="text-xs font-bold text-slate-400 mb-1 uppercase tracking-widest">Total</p><p className="text-3xl font-black">{stats.total}</p></div>
+                                    <div className="bg-white p-6 rounded-2xl border-l-4 border-l-emerald-500 shadow-sm"><p className="text-xs font-bold text-slate-400 mb-1 uppercase tracking-widest">No Ar</p><p className="text-3xl font-black text-emerald-600">{stats.noAr}</p></div>
+                                    <div className="bg-white p-6 rounded-2xl border-l-4 border-l-amber-500 shadow-sm"><p className="text-xs font-bold text-slate-400 mb-1 uppercase tracking-widest">Na Fila</p><p className="text-3xl font-black text-amber-600">{stats.naFila}</p></div>
+                                    <div className="bg-white p-6 rounded-2xl border-l-4 border-l-slate-400 shadow-sm"><p className="text-xs font-bold text-slate-400 mb-1 uppercase tracking-widest">Finalizadas</p><p className="text-3xl font-black text-slate-600">{stats.finalizadas}</p></div>
                                 </div>
 
                                 <div className="flex flex-col lg:flex-row gap-4 mb-6 no-print">
                                     <div className="relative flex-1">
-                                        <input type="text" placeholder="Pesquisar por nome..." className="w-full pl-10 pr-4 py-2 rounded-xl border outline-none focus:ring-2 focus:ring-orange-500 font-medium" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-                                        <div className="absolute left-3 top-2.5 text-slate-400"><Icon name="search" size={16} /></div>
+                                        <input type="text" placeholder="Pesquisar por nome ou solicitante..." className="w-full pl-10 pr-4 py-2.5 rounded-xl border outline-none focus:ring-2 focus:ring-orange-500 font-medium text-sm" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                                        <div className="absolute left-3 top-3 text-slate-400"><Icon name="search" size={16} /></div>
                                     </div>
-                                    <div className="flex gap-2 bg-slate-200 p-1 rounded-xl">
+                                    <div className="flex gap-2 bg-slate-200 p-1 rounded-xl whitespace-nowrap overflow-x-auto">
                                         {['Todos', 'Sazonal', 'On-demand', 'Sonora Trends'].map(f => (
-                                            <button key={f} onClick={() => setFilterFluxo(f)} className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${filterFluxo === f ? 'bg-white shadow-sm text-orange-600' : 'text-slate-500'}`}>{f}</button>
+                                            <button key={f} onClick={() => setFilterFluxo(f)} className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${filterFluxo === f ? 'bg-white shadow-sm text-orange-600' : 'text-slate-500 hover:text-slate-700'}`}>{f}</button>
                                         ))}
                                     </div>
-                                    <div className="flex gap-2 bg-slate-200 p-1 rounded-xl">
+                                    <div className="flex gap-2 bg-slate-200 p-1 rounded-xl whitespace-nowrap overflow-x-auto">
                                         {['Todos', 'Na Fila', 'No Ar', 'Finalizada'].map(s => (
-                                            <button key={s} onClick={() => setFilterStatus(s)} className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${filterStatus === s ? 'bg-white shadow-sm text-orange-600' : 'text-slate-500'}`}>{s}</button>
+                                            <button key={s} onClick={() => setFilterStatus(s)} className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${filterStatus === s ? 'bg-white shadow-sm text-orange-600' : 'text-slate-500 hover:text-slate-700'}`}>{s}</button>
                                         ))}
                                     </div>
                                 </div>
 
                                 <div className="bg-white rounded-2xl border shadow-sm overflow-hidden print-full-width">
-                                    <div className="grid grid-cols-12 bg-slate-50 p-4 text-xs font-black text-slate-400 uppercase tracking-widest border-b">
+                                    <div className="grid grid-cols-12 bg-slate-50 p-4 text-xs font-black text-slate-400 border-b uppercase tracking-widest">
                                         <div className="col-span-12 md:col-span-4">Pesquisa & Solicitante</div>
                                         <div className="hidden md:block md:col-span-2">Fluxo</div>
                                         <div className="hidden md:block md:col-span-2 text-center">Período</div>
-                                        <div className="hidden md:block md:col-span-2 print-hide-col">Progresso</div>
+                                        <div className="hidden md:block md:col-span-2">Progresso</div>
                                         <div className="hidden md:block md:col-span-2 text-right">Status</div>
                                     </div>
                                     <div className="divide-y">
                                         {filteredResearches.length > 0 ? filteredResearches.map(r => {
                                             const progress = r.respondentesEsperados ? Math.min(100, (r.respondentesAtuais / r.respondentesEsperados) * 100) : 0;
                                             return (
-                                                <div key={r.id} className="grid grid-cols-12 p-4 items-center hover:bg-slate-50 transition-colors group break-inside-avoid">
-                                                    <div className="col-span-12 md:col-span-4 flex items-start gap-4">
+                                                <div key={r.id} className="grid grid-cols-12 p-4 items-center hover:bg-slate-50 group transition-colors break-inside-avoid">
+                                                    <div className="col-span-12 md:col-span-4 flex items-start gap-3">
                                                         <div className="flex gap-1 opacity-0 group-hover:opacity-100 no-print transition-all pt-1">
-                                                            <button onClick={() => handleOpenResearchModal(r)} className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg"><Icon name="edit-2" size={14} /></button>
-                                                            <button onClick={() => handleDeleteResearch(r.id)} className="p-1.5 text-red-300 hover:text-red-500 hover:bg-red-50 rounded-lg"><Icon name="trash-2" size={14} /></button>
+                                                            <button onClick={() => handleOpenResearchModal(r)} className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg"><Icon name="edit-2" size={14}/></button>
+                                                            <button onClick={() => handleDeleteResearch(r.id)} className="p-1.5 text-red-300 hover:text-red-500 hover:bg-red-50 rounded-lg"><Icon name="trash-2" size={14}/></button>
                                                         </div>
                                                         <div className="flex-1">
                                                             <div className="text-lg font-bold text-slate-800 leading-tight group-hover:text-orange-600 transition-colors">{r.nome}</div>
                                                             <div className="text-sm text-slate-500 flex items-center gap-1.5 mt-0.5"><Icon name="users" size={14} className="opacity-60" /> {r.solicitante}</div>
-                                                            
-                                                            {/* Checkboxes de Etapas Operacionais */}
-                                                            <div className="flex gap-4 mt-3 no-print">
-                                                                <div className="flex items-center gap-1.5 opacity-80 hover:opacity-100 cursor-default transition-opacity">
-                                                                    <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center ${r.tabulacao ? 'bg-orange-500 border-orange-500' : 'border-slate-300 bg-white'}`}>
-                                                                        {r.tabulacao && <Icon name="check" size={10} className="text-white" />}
-                                                                    </div>
-                                                                    <span className="text-[10px] font-bold text-slate-600">Tabulação</span>
-                                                                </div>
-                                                                <div className="flex items-center gap-1.5 opacity-80 hover:opacity-100 cursor-default transition-opacity">
-                                                                    <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center ${r.analiseInsights ? 'bg-orange-500 border-orange-500' : 'border-slate-300 bg-white'}`}>
-                                                                        {r.analiseInsights && <Icon name="check" size={10} className="text-white" />}
-                                                                    </div>
-                                                                    <span className="text-[10px] font-bold text-slate-600">Análise & Insights</span>
-                                                                </div>
-                                                                <div className="flex items-center gap-1.5 opacity-80 hover:opacity-100 cursor-default transition-opacity">
-                                                                    <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center ${r.criacaoPPT ? 'bg-orange-500 border-orange-500' : 'border-slate-300 bg-white'}`}>
-                                                                        {r.criacaoPPT && <Icon name="check" size={10} className="text-white" />}
-                                                                    </div>
-                                                                    <span className="text-[10px] font-bold text-slate-600">Criação do PPT</span>
-                                                                </div>
+                                                            <div className="flex gap-3 mt-3 text-[10px] font-bold no-print">
+                                                                <span className={r.tabulacao ? "text-orange-600" : "text-slate-300 flex items-center gap-1"}>{r.tabulacao && '✓'} Tabulação</span>
+                                                                <span className={r.analiseInsights ? "text-orange-600" : "text-slate-300 flex items-center gap-1"}>{r.analiseInsights && '✓'} Insights</span>
+                                                                <span className={r.criacaoPPT ? "text-orange-600" : "text-slate-300 flex items-center gap-1"}>{r.criacaoPPT && '✓'} PPT</span>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -348,16 +366,16 @@
                                                     <div className="hidden md:block md:col-span-2 text-center text-xs text-slate-500">
                                                         {r.dataInicio ? (
                                                             <div>
-                                                                <span className="font-semibold">{new Date(r.dataInicio).toLocaleDateString('pt-BR')}</span> <br/>
+                                                                <span className="font-semibold text-slate-700">{new Date(r.dataInicio).toLocaleDateString('pt-BR')}</span> <br/>
                                                                 <span className="text-[10px] font-bold opacity-40 uppercase">até {new Date(r.dataFim).toLocaleDateString('pt-BR')}</span>
                                                             </div>
                                                         ) : '--'}
                                                     </div>
-                                                    <div className="hidden md:block md:col-span-2 print-hide-col px-4">
-                                                        <div className="h-2 bg-slate-100 rounded-full overflow-hidden border border-slate-200">
-                                                            <div className={`h-full ${progress === 100 ? 'bg-emerald-500' : 'bg-orange-500'} transition-all`} style={{width: `${progress}%`}}></div>
+                                                    <div className="hidden md:block md:col-span-2 px-4">
+                                                        <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden border">
+                                                            <div className="h-full bg-orange-500" style={{width: `${progress}%`}}></div>
                                                         </div>
-                                                        <p className="text-[10px] text-slate-400 mt-1.5 font-bold">{r.respondentesAtuais.toLocaleString()} / {r.respondentesEsperados.toLocaleString()}</p>
+                                                        <p className="text-[10px] text-slate-400 mt-1 font-bold">{r.respondentesAtuais?.toLocaleString()} / {r.respondentesEsperados?.toLocaleString()}</p>
                                                     </div>
                                                     <div className="col-span-12 md:col-span-2 flex justify-end">
                                                         <span className={`text-[11px] font-black px-3 py-1.5 rounded-full border ${getStatusStyle(r.status)}`}>{r.status}</span>
@@ -370,23 +388,24 @@
                                     </div>
                                 </div>
                             </div>
-                        ) : (
-                            <div className="max-w-3xl mx-auto animate-fade-in print-full-width">
+                        )}
+
+                        {currentView === 'workflow' && (
+                            <div className="max-w-3xl mx-auto animate-fade-in">
                                 <div className="text-center mb-8 no-print">
-                                    <h2 className="text-3xl font-black text-slate-800 tracking-tight">Manual de Fluxos Operacionais</h2>
+                                    <h2 className="text-3xl font-black text-slate-800 tracking-tight">Fluxos Operacionais</h2>
                                     <p className="text-slate-500 mt-2">Clique em cada fluxo para visualizar ou editar as etapas.</p>
                                 </div>
-                                <div className="flex bg-slate-200 p-1 rounded-2xl mb-12 no-print shadow-inner">
-                                    {Object.keys(allFlows).map(f => (
+                                <div className="flex bg-slate-200 p-1 rounded-2xl mb-12 shadow-inner">
+                                    {['Sazonal', 'On-demand', 'Sonora Trends'].map(f => (
                                         <button key={f} onClick={() => setActiveFlowTab(f)} className={`flex-1 py-3 rounded-xl text-sm font-black transition-all ${activeFlowTab === f ? 'bg-white text-orange-600 shadow-md' : 'text-slate-500 hover:text-slate-700'}`}>{f}</button>
                                     ))}
                                 </div>
                                 <div className="space-y-6">
-                                    <div className="hidden print:block text-center mb-6 font-black text-orange-600 border-b pb-4 uppercase tracking-widest">Manual de Fluxo: {activeFlowTab}</div>
                                     {(allFlows[activeFlowTab] || []).map((s, idx) => (
                                         <div key={s.id} className="flex gap-6 group break-inside-avoid">
                                             <div className="flex flex-col items-center">
-                                                <div className="w-10 h-10 rounded-full border-2 border-orange-500 bg-white text-orange-600 flex items-center justify-center font-black text-sm">{s.step}</div>
+                                                <div className="w-10 h-10 rounded-full border-2 border-orange-500 bg-white text-orange-600 flex items-center justify-center font-black">{s.step}</div>
                                                 {idx !== allFlows[activeFlowTab].length - 1 && <div className="w-0.5 h-full bg-slate-200 my-2"></div>}
                                             </div>
                                             <div className="flex-1 pb-8">
@@ -399,13 +418,12 @@
                                                                 <p className="text-sm text-slate-500 mt-1">{s.description}</p>
                                                             </div>
                                                         </div>
-                                                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 no-print transition-all">
-                                                            <button onClick={() => handleOpenModal(s)} className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg" title="Editar"><Icon name="edit-2" size={14} /></button>
-                                                            <button onClick={() => handleDeleteStep(s.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg" title="Excluir"><Icon name="trash-2" size={14} /></button>
-                                                        </div>
+                                                        {s.sla && <div className="text-[10px] font-black uppercase text-slate-400 flex items-center gap-1"><Icon name="clock" size={10}/> {s.sla}</div>}
                                                     </div>
-                                                    <div className="mt-4 pt-4 border-t text-[10px] text-slate-400 italic flex items-center gap-1">
-                                                        <Icon name="info" size={10} /> {s.detail || 'Sem observações técnicas.'}
+                                                    <div className="mt-4 pt-4 border-t text-[10px] text-slate-400 italic flex items-center gap-1"><Icon name="info" size={10} /> {s.detail || 'Sem observações.'}</div>
+                                                    <div className="absolute top-2 right-2 no-print flex gap-2 opacity-0 group-hover:opacity-100">
+                                                        <button onClick={() => handleOpenModal(s)} className="text-blue-500 p-1.5 hover:bg-blue-50 rounded-lg"><Icon name="edit-2" size={14}/></button>
+                                                        <button onClick={() => handleDeleteStep(s.id)} className="text-red-500 p-1.5 hover:bg-red-50 rounded-lg"><Icon name="trash-2" size={14}/></button>
                                                     </div>
                                                 </div>
                                             </div>
@@ -415,39 +433,151 @@
                                 </div>
                             </div>
                         )}
+
+                        {currentView === 'briefing' && (
+                            <div className="animate-fade-in max-w-5xl mx-auto pb-20">
+                                <div className="flex justify-between items-center mb-8 no-print">
+                                    <div>
+                                        <h2 className="text-2xl font-black text-slate-800 tracking-tight">Briefing de Campanha</h2>
+                                        <p className="text-sm text-slate-500">Formulário Akross compactado para exportação em página única.</p>
+                                    </div>
+                                    <div className="flex gap-3">
+                                        <button onClick={saveBriefing} className="bg-white border text-slate-600 px-4 py-2 rounded-lg text-sm font-bold hover:bg-slate-50 flex items-center gap-2 shadow-sm transition-all"><Icon name="save" size={16}/> Salvar no Banco</button>
+                                        <button onClick={handleExportPDF} className="bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-orange-700 flex items-center gap-2 shadow-lg shadow-orange-100 transition-all"><Icon name="printer" size={16}/> Exportar PDF 1 Pág</button>
+                                    </div>
+                                </div>
+
+                                <div className="bg-white border-[1.5px] border-black p-0.5 print-container shadow-sm overflow-hidden">
+                                    <table className="w-full border-collapse border border-black briefing-table">
+                                        <tbody>
+                                            <tr><th colSpan="2" className="bg-orange-header p-2 border border-black text-center text-white uppercase text-xs font-black tracking-widest">DADOS DO ANUNCIANTE</th></tr>
+                                            <tr>
+                                                <td className="w-1/3 border border-black font-black bg-slate-50 text-[10px] uppercase">Anunciante</td>
+                                                <td className="p-0 border border-black"><input type="text" className="w-full h-full p-2 outline-none font-medium text-xs" value={briefingData.anunciante} onChange={e => setBriefingData({...briefingData, anunciante: e.target.value})} /></td>
+                                            </tr>
+                                            <tr>
+                                                <td className="border border-black font-black bg-slate-50 text-[10px] uppercase">Vertical</td>
+                                                <td className="p-0 border border-black">
+                                                    <select className="w-full h-full p-2 outline-none appearance-none font-medium bg-transparent text-xs" value={briefingData.vertical} onChange={e => setBriefingData({...briefingData, vertical: e.target.value})}>
+                                                        {options.vertical.map(v => <option key={v} value={v}>{v}</option>)}
+                                                    </select>
+                                                </td>
+                                            </tr>
+
+                                            <tr><th colSpan="2" className="bg-orange-header p-2 border border-black text-center text-white uppercase text-xs font-black tracking-widest">DADOS DA CAMPANHA</th></tr>
+                                            <tr>
+                                                <td className="border border-black font-black bg-slate-50 text-[10px] uppercase">Canal</td>
+                                                <td className="p-0 border border-black">
+                                                    <select className="w-full h-full p-2 outline-none appearance-none font-medium bg-transparent text-xs" value={briefingData.canal} onChange={e => setBriefingData({...briefingData, canal: e.target.value})}>
+                                                        {options.canais.map(c => <option key={c} value={c}>{c}</option>)}
+                                                    </select>
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td className="border border-black font-black bg-slate-50 text-[10px] uppercase">Nome da campanha (RG)</td>
+                                                <td className="p-0 border border-black"><input type="text" className="w-full h-full p-2 outline-none placeholder-slate-300 font-medium text-xs" value={briefingData.nomeCampanha} onChange={e => setBriefingData({...briefingData, nomeCampanha: e.target.value})} /></td>
+                                            </tr>
+                                            <tr>
+                                                <td className="border border-black font-black bg-slate-50 text-[10px] uppercase">Formato</td>
+                                                <td className="p-0 border border-black">
+                                                    <select className="w-full h-full p-2 outline-none appearance-none font-medium bg-transparent text-xs" value={briefingData.formato} onChange={e => setBriefingData({...briefingData, formato: e.target.value})}>
+                                                        {options.formatos.map(f => <option key={f} value={f}>{f}</option>)}
+                                                    </select>
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td className="border border-black font-black bg-slate-50 text-[10px] uppercase">KPI Principal</td>
+                                                <td className="p-0 border border-black">
+                                                    <select className="w-full h-full p-2 outline-none appearance-none font-black bg-transparent text-xs text-orange-600" value={briefingData.kpi} onChange={e => setBriefingData({...briefingData, kpi: e.target.value})}>
+                                                        {options.metrics.map(m => <option key={m} value={m}>{m}</option>)}
+                                                    </select>
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td className="border border-black font-black bg-slate-50 text-[10px] uppercase">Data de início</td>
+                                                <td className="p-0 border border-black"><input type="date" className="w-full h-full p-2 outline-none font-medium text-xs" value={briefingData.dataInicio} onChange={e => setBriefingData({...briefingData, dataInicio: e.target.value})} /></td>
+                                            </tr>
+                                            <tr>
+                                                <td className="border border-black font-black bg-slate-50 text-[10px] uppercase">Data de término</td>
+                                                <td className="p-0 border border-black"><input type="date" className="w-full h-full p-2 outline-none font-medium text-xs" value={briefingData.dataFim} onChange={e => setBriefingData({...briefingData, dataFim: e.target.value})} /></td>
+                                            </tr>
+                                            <tr>
+                                                <td className="border border-black font-black bg-slate-50 text-[10px] uppercase">Volume contratado</td>
+                                                <td className="p-0 border border-black"><input type="text" className="w-full h-full p-2 outline-none font-medium text-xs" value={briefingData.volumeContratado} onChange={e => setBriefingData({...briefingData, volumeContratado: e.target.value})} /></td>
+                                            </tr>
+                                            <tr>
+                                                <td className="border border-black font-black bg-slate-50 text-[10px] uppercase">Segmentação</td>
+                                                <td className="p-0 border border-black"><textarea className="w-full h-16 p-2 outline-none resize-none font-medium text-xs" value={briefingData.segmentacao} onChange={e => setBriefingData({...briefingData, segmentacao: e.target.value})} /></td>
+                                            </tr>
+                                            <tr>
+                                                <td className="border border-black font-black bg-slate-50 text-[10px] uppercase">URL Redirecionamento</td>
+                                                <td className="p-0 border border-black"><input type="text" className="w-full h-full p-2 outline-none font-medium text-xs" value={briefingData.urlRedirecionamento} onChange={e => setBriefingData({...briefingData, urlRedirecionamento: e.target.value})} /></td>
+                                            </tr>
+                                            <tr>
+                                                <td className="border border-black font-black bg-slate-50 text-[10px] uppercase">Bonificação</td>
+                                                <td className="p-0 border border-black">
+                                                    <select className="w-full h-full p-2 outline-none appearance-none font-medium bg-transparent text-xs" value={briefingData.bonificacao} onChange={e => setBriefingData({...briefingData, bonificacao: e.target.value})}>
+                                                        {options.bonificacao.map(b => <option key={b} value={b}>{b}</option>)}
+                                                    </select>
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td className="border border-black font-black bg-slate-50 text-[10px] uppercase">Frequência usuário</td>
+                                                <td className="p-0 border border-black"><input type="text" className="w-full h-full p-2 outline-none font-medium text-xs" value={briefingData.frequencia} onChange={e => setBriefingData({...briefingData, frequencia: e.target.value})} /></td>
+                                            </tr>
+                                            <tr>
+                                                <td className="border border-black font-black bg-slate-50 text-[10px] uppercase">Limite dia</td>
+                                                <td className="p-0 border border-black"><input type="text" className="w-full h-full p-2 outline-none font-medium text-xs" value={briefingData.limiteDia} onChange={e => setBriefingData({...briefingData, limiteDia: e.target.value})} /></td>
+                                            </tr>
+                                            <tr>
+                                                <td className="border border-black font-black bg-slate-50 text-[10px] uppercase">Título Campanha (CTA)</td>
+                                                <td className="p-0 border border-black"><input type="text" className="w-full h-full p-2 outline-none font-bold text-orange-600 text-xs" value={briefingData.tituloCampanha} onChange={e => setBriefingData({...briefingData, tituloCampanha: e.target.value})} /></td>
+                                            </tr>
+
+                                            <tr><th colSpan="2" className="bg-orange-header p-2 border border-black text-center text-white uppercase text-xs font-black tracking-widest">CONFIGURAÇÃO DE CAMPANHA (QUESTIONÁRIO)</th></tr>
+                                            <tr>
+                                                <td className="border border-black font-black bg-slate-50 text-[10px] uppercase">Campos Formulário</td>
+                                                <td className="p-0 border border-black"><textarea className="w-full h-20 p-2 outline-none resize-none font-medium text-xs" value={briefingData.camposFormulario} onChange={e => setBriefingData({...briefingData, camposFormulario: e.target.value})} /></td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
                     </main>
 
-                    {/* Modal de Etapa do Fluxo */}
+                    {/* Modais omitidos para brevidade mas mantidos no código original... */}
                     {isModalOpen && (
                         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 no-print">
                             <div className="bg-white rounded-3xl w-full max-md shadow-2xl animate-fade-in overflow-hidden">
                                 <div className="p-6 border-b flex justify-between items-center bg-slate-50">
                                     <h3 className="font-black text-slate-800">{editingStep ? 'Editar Etapa' : 'Nova Etapa'}</h3>
-                                    <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-slate-200 rounded-full transition-colors"><Icon name="x" /></button>
+                                    <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-slate-200 rounded-full"><Icon name="x"/></button>
                                 </div>
                                 <div className="p-6 space-y-4">
-                                    <input type="text" className="w-full px-4 py-2 bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-orange-500" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} placeholder="Título da Etapa" />
-                                    <textarea className="w-full px-4 py-2 bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-orange-500 h-20" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} placeholder="Descrição" />
-                                    <input type="text" className="w-full px-4 py-2 bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-orange-500" value={formData.detail} onChange={e => setFormData({...formData, detail: e.target.value})} placeholder="Dica técnica" />
-                                    <select className="w-full px-4 py-2 bg-slate-50 border rounded-xl outline-none" value={formData.icon} onChange={e => setFormData({...formData, icon: e.target.value})}>
-                                        <option value="clipboard-list">📋 Briefing</option>
-                                        <option value="file-edit">📝 Criação / Edição</option>
-                                        <option value="send">🚀 Veiculação / Akross</option>
-                                        <option value="zap">⚡ Agilidade / On-demand</option>
-                                        <option value="music">🎵 Música / Sonora</option>
-                                        <option value="check-circle">✅ Validação / Finalizado</option>
-                                        <option value="bar-chart">📊 Relatórios</option>
-                                    </select>
+                                    <input type="text" className="w-full px-4 py-2 bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-orange-500 text-sm" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} placeholder="Título da Etapa" />
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <input type="text" className="w-full px-4 py-2 bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-orange-500 text-sm font-bold text-orange-600" value={formData.sla} onChange={e => setFormData({...formData, sla: e.target.value})} placeholder="SLA (ex: 24h)" />
+                                        <select className="w-full px-4 py-2 bg-slate-50 border rounded-xl outline-none text-sm" value={formData.icon} onChange={e => setFormData({...formData, icon: e.target.value})}>
+                                            <option value="clipboard-list">Briefing</option>
+                                            <option value="file-edit">Criação</option>
+                                            <option value="send">Veiculação</option>
+                                            <option value="zap">On-demand</option>
+                                            <option value="music">Sonora</option>
+                                            <option value="check-circle">Validado</option>
+                                        </select>
+                                    </div>
+                                    <textarea className="w-full px-4 py-2 bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-orange-500 h-20 text-sm" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} placeholder="Descrição" />
+                                    <input type="text" className="w-full px-4 py-2 bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-orange-500 text-sm" value={formData.detail} onChange={e => setFormData({...formData, detail: e.target.value})} placeholder="Dica técnica" />
                                 </div>
                                 <div className="p-6 bg-slate-50 flex gap-2">
                                     <button onClick={() => setIsModalOpen(false)} className="flex-1 py-3 font-bold text-slate-500 hover:text-slate-800">Cancelar</button>
-                                    <button onClick={handleSaveStep} className="flex-1 py-3 bg-orange-600 text-white rounded-xl font-bold hover:bg-orange-700">Salvar Etapa</button>
+                                    <button onClick={handleSaveStep} className="flex-1 py-3 bg-orange-600 text-white rounded-xl font-bold hover:bg-orange-700 transition-all">Salvar Etapa</button>
                                 </div>
                             </div>
                         </div>
                     )}
 
-                    {/* Modal de Pesquisa (Nova/Edição) com Checkboxes Operacionais */}
                     {isResearchModalOpen && (
                         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 no-print">
                             <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl animate-fade-in overflow-hidden">
@@ -457,42 +587,39 @@
                                 </div>
                                 <div className="p-6 grid grid-cols-2 gap-4 max-h-[75vh] overflow-y-auto">
                                     <div className="col-span-2">
-                                        <label className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Nome</label>
-                                        <input type="text" className="w-full px-4 py-2.5 bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-orange-500" value={researchFormData.nome} onChange={e => setResearchFormData({...researchFormData, nome: e.target.value})} placeholder="Nome da Pesquisa" />
+                                        <label className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Nome da Pesquisa</label>
+                                        <input type="text" className="w-full px-4 py-2.5 bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-orange-500 font-medium" value={researchFormData.nome} onChange={e => setResearchFormData({...researchFormData, nome: e.target.value})} placeholder="Ex: Pesquisa de Hábitos" />
                                     </div>
                                     <div className="col-span-2">
                                         <label className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Solicitante</label>
-                                        <input type="text" className="w-full px-4 py-2.5 bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-orange-500" value={researchFormData.solicitante} onChange={e => setResearchFormData({...researchFormData, solicitante: e.target.value})} placeholder="Solicitante" />
+                                        <input type="text" className="w-full px-4 py-2.5 bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-orange-500 font-medium" value={researchFormData.solicitante} onChange={e => setResearchFormData({...researchFormData, solicitante: e.target.value})} placeholder="Área / Cliente" />
                                     </div>
-                                    <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Início</label><input type="date" className="w-full px-4 py-2.5 bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-orange-500" value={researchFormData.dataInicio} onChange={e => setResearchFormData({...researchFormData, dataInicio: e.target.value})} /></div>
-                                    <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Fim</label><input type="date" className="w-full px-4 py-2.5 bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-orange-500" value={researchFormData.dataFim} onChange={e => setResearchFormData({...researchFormData, dataFim: e.target.value})} /></div>
-                                    <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Meta</label><input type="number" className="w-full px-4 py-2.5 bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-orange-500" value={researchFormData.respondentesEsperados} onChange={e => setResearchFormData({...researchFormData, respondentesEsperados: e.target.value})} /></div>
-                                    <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Coletados</label><input type="number" className="w-full px-4 py-2.5 bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-orange-500" value={researchFormData.respondentesAtuais} onChange={e => setResearchFormData({...researchFormData, respondentesAtuais: e.target.value})} /></div>
+                                    <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Início</label><input type="date" className="w-full px-4 py-2.5 bg-slate-50 border rounded-xl outline-none" value={researchFormData.dataInicio} onChange={e => setResearchFormData({...researchFormData, dataInicio: e.target.value})} /></div>
+                                    <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Fim</label><input type="date" className="w-full px-4 py-2.5 bg-slate-50 border rounded-xl outline-none" value={researchFormData.dataFim} onChange={e => setResearchFormData({...researchFormData, dataFim: e.target.value})} /></div>
+                                    <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Meta</label><input type="number" className="w-full px-4 py-2.5 bg-slate-50 border rounded-xl outline-none" value={researchFormData.respondentesEsperados} onChange={e => setResearchFormData({...researchFormData, respondentesEsperados: e.target.value})} /></div>
+                                    <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Captados</label><input type="number" className="w-full px-4 py-2.5 bg-slate-50 border rounded-xl outline-none" value={researchFormData.respondentesAtuais} onChange={e => setResearchFormData({...researchFormData, respondentesAtuais: e.target.value})} /></div>
                                     <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Fluxo</label><select className="w-full px-4 py-2.5 bg-slate-50 border rounded-xl outline-none" value={researchFormData.fluxo} onChange={e => setResearchFormData({...researchFormData, fluxo: e.target.value})}><option value="Sazonal">Sazonal</option><option value="On-demand">On-demand</option><option value="Sonora Trends">Sonora Trends</option></select></div>
                                     <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Status</label><select className="w-full px-4 py-2.5 bg-slate-50 border rounded-xl outline-none" value={researchFormData.status} onChange={e => setResearchFormData({...researchFormData, status: e.target.value})}><option value="Na Fila">Na Fila</option><option value="No Ar">No Ar</option><option value="Finalizada">Finalizada</option></select></div>
                                     
-                                    {/* SEÇÃO DE CHECKBOXES OPERACIONAIS */}
-                                    <div className="col-span-2 pt-2 border-t mt-2">
-                                        <label className="text-[10px] font-black uppercase text-orange-600 ml-1 block mb-3">Etapas Operacionais</label>
-                                        <div className="space-y-2">
-                                            <label className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer border border-transparent hover:border-slate-200">
-                                                <input type="checkbox" className="w-4 h-4 accent-orange-600" checked={researchFormData.tabulacao} onChange={e => setResearchFormData({...researchFormData, tabulacao: e.target.checked})} />
-                                                <span className="text-sm font-bold text-slate-700">1. Tabulação</span>
-                                            </label>
-                                            <label className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer border border-transparent hover:border-slate-200">
-                                                <input type="checkbox" className="w-4 h-4 accent-orange-600" checked={researchFormData.analiseInsights} onChange={e => setResearchFormData({...researchFormData, analiseInsights: e.target.checked})} />
-                                                <span className="text-sm font-bold text-slate-700">2. Análise & Insights</span>
-                                            </label>
-                                            <label className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer border border-transparent hover:border-slate-200">
-                                                <input type="checkbox" className="w-4 h-4 accent-orange-600" checked={researchFormData.criacaoPPT} onChange={e => setResearchFormData({...researchFormData, criacaoPPT: e.target.checked})} />
-                                                <span className="text-sm font-bold text-slate-700">3. Criação do PPT</span>
-                                            </label>
+                                    <div className="col-span-2 pt-4 border-t space-y-3">
+                                        <p className="text-[10px] font-black uppercase text-orange-600">Acompanhamento Operacional</p>
+                                        <div className="flex justify-between items-center bg-slate-50 p-2.5 rounded-xl border border-transparent hover:border-slate-200 transition-all">
+                                            <span className="text-xs font-bold text-slate-700">1. Tabulação finalizada</span>
+                                            <input type="checkbox" className="w-4 h-4 accent-orange-600" checked={researchFormData.tabulacao} onChange={e => setResearchFormData({...researchFormData, tabulacao: e.target.checked})} />
+                                        </div>
+                                        <div className="flex justify-between items-center bg-slate-50 p-2.5 rounded-xl border border-transparent hover:border-slate-200 transition-all">
+                                            <span className="text-xs font-bold text-slate-700">2. Análise & Insights gerados</span>
+                                            <input type="checkbox" className="w-4 h-4 accent-orange-600" checked={researchFormData.analiseInsights} onChange={e => setResearchFormData({...researchFormData, analiseInsights: e.target.checked})} />
+                                        </div>
+                                        <div className="flex justify-between items-center bg-slate-50 p-2.5 rounded-xl border border-transparent hover:border-slate-200 transition-all">
+                                            <span className="text-xs font-bold text-slate-700">3. Criação do PPT concluída</span>
+                                            <input type="checkbox" className="w-4 h-4 accent-orange-600" checked={researchFormData.criacaoPPT} onChange={e => setResearchFormData({...researchFormData, criacaoPPT: e.target.checked})} />
                                         </div>
                                     </div>
                                 </div>
                                 <div className="p-6 bg-slate-50 flex gap-2">
-                                    <button onClick={() => setIsResearchModalOpen(false)} className="flex-1 py-3 font-bold text-slate-500 hover:text-slate-800">Cancelar</button>
-                                    <button onClick={handleSaveResearch} className="flex-1 py-3 bg-orange-600 text-white rounded-xl font-bold hover:bg-orange-700 shadow-lg flex justify-center gap-2 items-center active:scale-95 transition-transform"><Icon name="save" /> Salvar Pesquisa</button>
+                                    <button onClick={() => setIsResearchModalOpen(false)} className="flex-1 py-3 font-bold text-slate-500 hover:text-slate-800 transition-colors">Cancelar</button>
+                                    <button onClick={handleSaveResearch} className="flex-1 py-3 bg-orange-600 text-white rounded-xl font-bold hover:bg-orange-700 shadow-lg active:scale-95 transition-transform"><Icon name="save" className="mr-2"/> Salvar Pesquisa</button>
                                 </div>
                             </div>
                         </div>
